@@ -1,0 +1,59 @@
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import * as express from 'express';
+import * as cors from 'cors';
+
+const serviceAccount = require('./serviceAccountKey.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: ''
+});
+
+const db = admin.firestore();
+
+// // Start writing Firebase Functions
+// // https://firebase.google.com/docs/functions/typescript
+//
+
+export const getGOTY = functions.https.onRequest( async (request, response) => {
+    const gotyRef = db.collection('goty');
+    const docsSnap = await gotyRef.get();
+    const games = docsSnap.docs.map( doc => doc.data() );
+    response.json( games );
+});
+
+const app = express();
+app.use( cors( { origin: true } ) );
+
+app.get('/goty', async (request, response) => {
+  const gotyRef = db.collection('goty');
+  const docsSnap = await gotyRef.get();
+  const games = docsSnap.docs.map( doc => doc.data() );
+  response.json( games );
+});
+
+app.post('/goty/:id', async (request, response) => {
+  const id = request.params.id;
+  const gameRef = db.collection('goty').doc( id );
+  const gameSnap = await gameRef.get();
+
+  if ( !gameSnap.exists ) {
+    response.status(404).json({
+      ok: false,
+      message: 'There is no game with that ID ' + id
+    })
+  } else {
+    const before = gameSnap.data() || { votes: 0 };
+    await gameRef.update({
+      votes: before.votes + 1
+    });
+    response.json({
+      ok: true,
+      message: `Thank you for your vote to ${ before.name }` 
+    })
+  }
+});
+
+
+export const api = functions.https.onRequest( app );
